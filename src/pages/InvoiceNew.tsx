@@ -34,7 +34,7 @@ const InvoiceNew = () => {
   
   const [customerId, setCustomerId] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
-  const [gstType, setGstType] = useState<"intrastate" | "interstate">("intrastate");
+  const [gstType, setGstType] = useState<"CGST_SGST" | "IGST">("CGST_SGST");
   const [gstRate, setGstRate] = useState(18);
   const [notes, setNotes] = useState("");
   
@@ -172,7 +172,7 @@ const InvoiceNew = () => {
         status: "pending",
         notes,
         created_by: user.id,
-        ...(gstType === "intrastate" ? {
+        ...(gstType === "CGST_SGST" ? {
           cgst_rate: gstRate / 2,
           cgst_amount: gstAmount / 2,
           sgst_rate: gstRate / 2,
@@ -274,8 +274,8 @@ const InvoiceNew = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="intrastate">Intrastate (CGST + SGST)</SelectItem>
-                    <SelectItem value="interstate">Interstate (IGST)</SelectItem>
+                    <SelectItem value="CGST_SGST">Intrastate (CGST + SGST)</SelectItem>
+                    <SelectItem value="IGST">Interstate (IGST)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -349,7 +349,7 @@ const InvoiceNew = () => {
                   <div className="col-span-5 md:col-span-2 space-y-2">
                     <Label>Amount (₹)</Label>
                     <Input
-                      type="number"
+                      type="text"
                       value={item.amount.toFixed(2)}
                       disabled
                     />
@@ -377,7 +377,7 @@ const InvoiceNew = () => {
                   <span className="font-medium">₹{calculateSubtotal().toFixed(2)}</span>
                 </div>
                 
-                {gstType === "intrastate" ? (
+                {gstType === "CGST_SGST" ? (
                   <>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">CGST ({gstRate / 2}%):</span>
