@@ -9,7 +9,9 @@ import Auth from "./pages/Auth";
 import Customers from "./pages/Customers";
 import Invoices from "./pages/Invoices";
 import InvoiceNew from "./pages/InvoiceNew";
+import InvoiceView from "./pages/InvoiceView";
 import Dyeing from "./pages/Dyeing";
+import DyeingNew from "./pages/DyeingNew";
 import Payments from "./pages/Payments";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
@@ -29,7 +31,9 @@ const App = () => (
           <Route path="/customers" element={<Layout><Customers /></Layout>} />
           <Route path="/invoices" element={<Layout><Invoices /></Layout>} />
           <Route path="/invoices/new" element={<Layout><InvoiceNew /></Layout>} />
+          <Route path="/invoices/:id" element={<Layout><InvoiceView /></Layout>} />
           <Route path="/dyeing" element={<Layout><Dyeing /></Layout>} />
+          <Route path="/dyeing/new" element={<Layout><DyeingNew /></Layout>} />
           <Route path="/payments" element={<Layout><Payments /></Layout>} />
           <Route path="/reports" element={<Layout><Reports /></Layout>} />
           <Route path="/settings" element={<Layout><Settings /></Layout>} />
