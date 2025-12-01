@@ -7,7 +7,7 @@ import {
   Users,
   FileText,
   Palette,
-  CreditCard,
+  
   BarChart3,
   Settings,
   LogOut,
@@ -62,7 +62,6 @@ const Layout = ({ children }: LayoutProps) => {
     { name: "Customers", href: "/customers", icon: Users },
     { name: "Invoices", href: "/invoices", icon: FileText },
     { name: "Dyeing Bills", href: "/dyeing", icon: Palette },
-    { name: "Payments", href: "/payments", icon: CreditCard },
     { name: "Reports", href: "/reports", icon: BarChart3 },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
