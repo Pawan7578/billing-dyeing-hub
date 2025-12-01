@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { Upload, X } from "lucide-react";
 
 interface CompanyProfile {
   id: string;
@@ -19,7 +20,10 @@ interface CompanyProfile {
 
 const Settings = () => {
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     company_name: "",
     address: "",
@@ -46,6 +50,7 @@ const Settings = () => {
       
       if (data) {
         setProfile(data);
+        setLogoPreview(data.logo_url);
         setFormData({
           company_name: data.company_name,
           address: data.address || "",
@@ -64,22 +69,74 @@ const Settings = () => {
     }
   };
 
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLogoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+  };
+
+  const uploadLogo = async (): Promise<string | null> => {
+    if (!logoFile) return logoPreview;
+
+    setUploading(true);
+    try {
+      const fileExt = logoFile.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('company-logos')
+        .upload(filePath, logoFile);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('company-logos')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error: any) {
+      toast.error("Failed to upload logo");
+      console.error(error);
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
+      const logoUrl = await uploadLogo();
+      const dataToSave = {
+        ...formData,
+        logo_url: logoUrl,
+      };
+
       if (profile) {
         const { error } = await supabase
           .from("company_profile")
-          .update(formData)
+          .update(dataToSave)
           .eq("id", profile.id);
 
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from("company_profile")
-          .insert(formData);
+          .insert(dataToSave);
 
         if (error) throw error;
       }
@@ -116,7 +173,47 @@ const Settings = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Logo Upload Section */}
+            <div className="space-y-2">
+              <Label>Company Logo</Label>
+              <div className="flex items-center gap-4">
+                {logoPreview ? (
+                  <div className="relative">
+                    <img
+                      src={logoPreview}
+                      alt="Company Logo"
+                      className="h-24 w-24 object-contain border border-border rounded-lg"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                      onClick={handleRemoveLogo}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="h-24 w-24 border-2 border-dashed border-border rounded-lg flex items-center justify-center">
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoChange}
+                    className="cursor-pointer"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Upload your company logo (PNG, JPG, or SVG recommended)
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="company_name">Company Name *</Label>
@@ -182,8 +279,8 @@ const Settings = () => {
               </div>
             </div>
             <div className="flex justify-end">
-              <Button type="submit" disabled={loading}>
-                Save Changes
+              <Button type="submit" disabled={loading || uploading}>
+                {uploading ? "Uploading..." : loading ? "Saving..." : "Save Changes"}
               </Button>
             </div>
           </form>

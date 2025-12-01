@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Eye, FileDown } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Plus, Eye, Share2 } from "lucide-react";
+import * as XLSX from "xlsx";
 
 interface Invoice {
   id: string;
@@ -20,11 +21,24 @@ interface Invoice {
 const Invoices = () => {
   const navigate = useNavigate();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchInvoices();
+    fetchCompanyProfile();
   }, []);
+
+  const fetchCompanyProfile = async () => {
+    const { data } = await supabase
+      .from("company_profile")
+      .select("*")
+      .single();
+    
+    if (data) {
+      setCompanyProfile(data);
+    }
+  };
 
   const fetchInvoices = async () => {
     try {
@@ -51,6 +65,39 @@ const Invoices = () => {
     }
   };
 
+  const handleExportExcel = () => {
+    const worksheetData = [
+      ["Invoice Number", "Date", "Customer", "Amount", "Status"],
+      ...invoices.map(inv => [
+        inv.invoice_number,
+        new Date(inv.invoice_date).toLocaleDateString("en-IN"),
+        inv.customers?.name || "",
+        inv.total_amount,
+        inv.status.toUpperCase()
+      ])
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Invoices");
+    XLSX.writeFile(workbook, `Invoices_${new Date().toLocaleDateString("en-IN")}.xlsx`);
+    toast.success("Invoices exported to Excel");
+  };
+
+  const handleWhatsAppShare = () => {
+    const message = `*Invoice List - ${companyProfile?.company_name || ""}*\n\n` +
+      invoices.map(inv => 
+        `📄 ${inv.invoice_number}\n` +
+        `Customer: ${inv.customers?.name}\n` +
+        `Amount: ₹${inv.total_amount}\n` +
+        `Status: ${inv.status.toUpperCase()}\n`
+      ).join("\n") +
+      `\nTotal Invoices: ${invoices.length}`;
+
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, "_blank");
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "paid":
@@ -64,15 +111,21 @@ const Invoices = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Invoices</h1>
-          <p className="text-muted-foreground mt-1">Manage your invoices</p>
+          <p className="text-muted-foreground mt-1">Manage your sales invoices</p>
         </div>
-        <Button onClick={() => navigate("/invoices/new")}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Invoice
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleWhatsAppShare}>
+            <Share2 className="h-4 w-4 mr-2" />
+            Share
+          </Button>
+          <Button onClick={() => navigate("/invoices/new")}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Invoice
+          </Button>
+        </div>
       </div>
 
       <Card>
