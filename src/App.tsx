@@ -12,7 +12,7 @@ import InvoiceNew from "./pages/InvoiceNew";
 import InvoiceView from "./pages/InvoiceView";
 import Dyeing from "./pages/Dyeing";
 import DyeingNew from "./pages/DyeingNew";
-
+import DyeingBillView from "./pages/DyeingBillView";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -34,6 +34,7 @@ const App = () => (
           <Route path="/invoices/:id" element={<Layout><InvoiceView /></Layout>} />
           <Route path="/dyeing" element={<Layout><Dyeing /></Layout>} />
           <Route path="/dyeing/new" element={<Layout><DyeingNew /></Layout>} />
+          <Route path="/dyeing/:id" element={<Layout><DyeingBillView /></Layout>} />
           <Route path="/reports" element={<Layout><Reports /></Layout>} />
           <Route path="/settings" element={<Layout><Settings /></Layout>} />
           <Route path="*" element={<NotFound />} />

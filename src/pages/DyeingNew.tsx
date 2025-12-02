@@ -59,13 +59,15 @@ const DyeingNew = () => {
     const { data, error } = await supabase
       .from("company_profile")
       .select("*")
-      .single();
+      .maybeSingle();
     
     if (error) {
       console.error("Failed to fetch company profile:", error);
       return;
     }
-    setCompanyProfile(data);
+    if (data) {
+      setCompanyProfile(data);
+    }
   };
 
   const addItem = () => {

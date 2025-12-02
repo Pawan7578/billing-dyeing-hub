@@ -120,6 +120,14 @@ const Dyeing = () => {
                         ₹{bill.paid_amount?.toLocaleString("en-IN", { maximumFractionDigits: 2 }) || "0.00"}
                       </p>
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/dyeing/${bill.id}`)}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      View
+                    </Button>
                   </div>
                 </div>
               ))}
