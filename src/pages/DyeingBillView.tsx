@@ -7,75 +7,65 @@ import { toast } from "sonner";
 import { ArrowLeft, Printer, Share2, FileDown } from "lucide-react";
 import * as XLSX from "xlsx";
 
-interface InvoiceData {
+interface DyeingBillData {
   id: string;
-  invoice_number: string;
-  invoice_date: string;
-  gst_type: string;
-  subtotal: number;
-  cgst_rate: number | null;
-  cgst_amount: number | null;
-  sgst_rate: number | null;
-  sgst_amount: number | null;
-  igst_rate: number | null;
-  igst_amount: number | null;
+  bill_number: string;
+  bill_date: string;
   total_amount: number;
-  paid_amount: number;
+  paid_amount: number | null;
   status: string;
   notes: string | null;
   customers: {
     name: string;
     address: string | null;
-    gstin: string | null;
     phone: string | null;
   } | null;
 }
 
-interface InvoiceItem {
-  item_name: string;
-  hsn_code: string;
+interface DyeingBillItem {
+  product_name: string;
   quantity: number;
   rate: number;
   amount: number;
 }
 
-const InvoiceView = () => {
+const DyeingBillView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [invoice, setInvoice] = useState<InvoiceData | null>(null);
-  const [items, setItems] = useState<InvoiceItem[]>([]);
+  const [bill, setBill] = useState<DyeingBillData | null>(null);
+  const [items, setItems] = useState<DyeingBillItem[]>([]);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchInvoiceData();
+    fetchBillData();
     fetchCompanyProfile();
   }, [id]);
 
-  const fetchInvoiceData = async () => {
+  const fetchBillData = async () => {
     try {
-      const { data: invoiceData, error: invoiceError } = await supabase
-        .from("invoices")
+      const { data: billData, error: billError } = await supabase
+        .from("dyeing_bills")
         .select(`
           *,
-          customers (name, address, gstin, phone)
+          customers (name, address, phone)
         `)
         .eq("id", id)
         .single();
 
-      if (invoiceError) throw invoiceError;
-      setInvoice(invoiceData);
+      if (billError) throw billError;
+      setBill(billData);
 
       const { data: itemsData, error: itemsError } = await supabase
-        .from("invoice_items")
+        .from("dyeing_bill_items")
         .select("*")
-        .eq("invoice_id", id);
+        .eq("bill_id", id);
 
       if (itemsError) throw itemsError;
       setItems(itemsData || []);
     } catch (error: any) {
-      console.error("Error fetching invoice:", error);
-      toast.error("Failed to fetch invoice");
+      console.error("Error fetching dyeing bill:", error);
+      toast.error("Failed to fetch dyeing bill");
     } finally {
       setLoading(false);
     }
@@ -85,9 +75,9 @@ const InvoiceView = () => {
     const { data, error } = await supabase
       .from("company_profile")
       .select("*")
-      .maybeSingle();
+      .single();
     
-    if (!error && data) {
+    if (!error) {
       setCompanyProfile(data);
     }
   };
@@ -97,57 +87,43 @@ const InvoiceView = () => {
   };
 
   const handleExportExcel = () => {
-    if (!invoice) return;
+    if (!bill) return;
 
     const worksheetData = [
-      ["Invoice Number", invoice.invoice_number],
-      ["Date", new Date(invoice.invoice_date).toLocaleDateString("en-IN")],
-      ["Customer", invoice.customers?.name || ""],
-      ["GSTIN", invoice.customers?.gstin || ""],
+      ["Bill Number", bill.bill_number],
+      ["Date", new Date(bill.bill_date).toLocaleDateString("en-IN")],
+      ["Customer", bill.customers?.name || ""],
       [],
-      ["Item Name", "HSN Code", "Quantity", "Rate", "Amount"],
+      ["Product Name", "Quantity", "Rate", "Amount"],
       ...items.map(item => [
-        item.item_name,
-        item.hsn_code,
+        item.product_name,
         item.quantity,
         item.rate,
         item.amount
       ]),
       [],
-      ["Subtotal", "", "", "", invoice.subtotal],
-      ...(invoice.gst_type === "CGST_SGST" ? [
-        [`CGST (${invoice.cgst_rate}%)`, "", "", "", invoice.cgst_amount],
-        [`SGST (${invoice.sgst_rate}%)`, "", "", "", invoice.sgst_amount],
-      ] : [
-        [`IGST (${invoice.igst_rate}%)`, "", "", "", invoice.igst_amount],
-      ]),
-      ["Total Amount", "", "", "", invoice.total_amount],
+      ["Total Amount", "", "", bill.total_amount],
     ];
 
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Invoice");
-    XLSX.writeFile(workbook, `${invoice.invoice_number}.xlsx`);
-    toast.success("Invoice exported to Excel");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Dyeing Bill");
+    XLSX.writeFile(workbook, `${bill.bill_number}.xlsx`);
+    toast.success("Dyeing bill exported to Excel");
   };
 
   const handleWhatsAppShare = () => {
-    if (!invoice) return;
+    if (!bill) return;
 
-    const message = `*Invoice: ${invoice.invoice_number}*\n\n` +
-      `Customer: ${invoice.customers?.name}\n` +
-      `Date: ${new Date(invoice.invoice_date).toLocaleDateString("en-IN")}\n\n` +
+    const message = `*Dyeing Bill: ${bill.bill_number}*\n\n` +
+      `Customer: ${bill.customers?.name}\n` +
+      `Date: ${new Date(bill.bill_date).toLocaleDateString("en-IN")}\n\n` +
       `*Items:*\n` +
       items.map(item => 
-        `${item.item_name} (HSN: ${item.hsn_code})\n` +
+        `${item.product_name}\n` +
         `Qty: ${item.quantity} × ₹${item.rate} = ₹${item.amount}`
       ).join("\n\n") +
-      `\n\n*Subtotal:* ₹${invoice.subtotal}\n` +
-      (invoice.gst_type === "CGST_SGST" 
-        ? `*CGST (${invoice.cgst_rate}%):* ₹${invoice.cgst_amount}\n*SGST (${invoice.sgst_rate}%):* ₹${invoice.sgst_amount}\n`
-        : `*IGST (${invoice.igst_rate}%):* ₹${invoice.igst_amount}\n`
-      ) +
-      `*Total Amount:* ₹${invoice.total_amount}\n\n` +
+      `\n\n*Total Amount:* ₹${bill.total_amount}\n\n` +
       `${companyProfile?.company_name || ""}`;
 
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
@@ -162,10 +138,10 @@ const InvoiceView = () => {
     );
   }
 
-  if (!invoice) {
+  if (!bill) {
     return (
       <div className="text-center py-8">
-        <p className="text-muted-foreground">Invoice not found</p>
+        <p className="text-muted-foreground">Dyeing bill not found</p>
       </div>
     );
   }
@@ -174,12 +150,12 @@ const InvoiceView = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between print:hidden">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/invoices")}>
+          <Button variant="ghost" size="icon" onClick={() => navigate("/dyeing")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">Invoice {invoice.invoice_number}</h1>
-            <p className="text-muted-foreground mt-1">View and print invoice</p>
+            <h1 className="text-3xl font-bold">Dyeing Bill {bill.bill_number}</h1>
+            <p className="text-muted-foreground mt-1">View and print dyeing bill</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -212,19 +188,18 @@ const InvoiceView = () => {
           </div>
         </div>
 
-        {/* Invoice Details */}
+        {/* Bill Details */}
         <div className="grid grid-cols-2 gap-8 mb-6">
           <div>
             <h3 className="font-semibold text-lg mb-2">Bill To:</h3>
-            <p className="font-medium">{invoice.customers?.name}</p>
-            <p className="text-sm text-muted-foreground">{invoice.customers?.address}</p>
-            <p className="text-sm text-muted-foreground">GSTIN: {invoice.customers?.gstin}</p>
-            <p className="text-sm text-muted-foreground">Phone: {invoice.customers?.phone}</p>
+            <p className="font-medium">{bill.customers?.name}</p>
+            <p className="text-sm text-muted-foreground">{bill.customers?.address}</p>
+            <p className="text-sm text-muted-foreground">Phone: {bill.customers?.phone}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm"><span className="font-semibold">Invoice No:</span> {invoice.invoice_number}</p>
-            <p className="text-sm"><span className="font-semibold">Date:</span> {new Date(invoice.invoice_date).toLocaleDateString("en-IN")}</p>
-            <p className="text-sm"><span className="font-semibold">Status:</span> <span className="uppercase">{invoice.status}</span></p>
+            <p className="text-sm"><span className="font-semibold">Bill No:</span> {bill.bill_number}</p>
+            <p className="text-sm"><span className="font-semibold">Date:</span> {new Date(bill.bill_date).toLocaleDateString("en-IN")}</p>
+            <p className="text-sm"><span className="font-semibold">Status:</span> <span className="uppercase">{bill.status}</span></p>
           </div>
         </div>
 
@@ -233,8 +208,7 @@ const InvoiceView = () => {
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b-2 border-primary">
-                <th className="text-left py-2">Item Name</th>
-                <th className="text-center py-2">HSN</th>
+                <th className="text-left py-2">Product Name</th>
                 <th className="text-right py-2">Qty</th>
                 <th className="text-right py-2">Rate</th>
                 <th className="text-right py-2">Amount</th>
@@ -243,8 +217,7 @@ const InvoiceView = () => {
             <tbody>
               {items.map((item, index) => (
                 <tr key={index} className="border-b">
-                  <td className="py-3">{item.item_name}</td>
-                  <td className="text-center py-3">{item.hsn_code}</td>
+                  <td className="py-3">{item.product_name}</td>
                   <td className="text-right py-3">{item.quantity}</td>
                   <td className="text-right py-3">₹{item.rate.toFixed(2)}</td>
                   <td className="text-right py-3">₹{item.amount.toFixed(2)}</td>
@@ -257,39 +230,30 @@ const InvoiceView = () => {
         {/* Totals */}
         <div className="flex justify-end">
           <div className="w-80 space-y-2">
-            <div className="flex justify-between py-1">
-              <span>Subtotal:</span>
-              <span>₹{invoice.subtotal.toFixed(2)}</span>
-            </div>
-            {invoice.gst_type === "CGST_SGST" ? (
-              <>
-                <div className="flex justify-between py-1">
-                  <span>CGST ({invoice.cgst_rate}%):</span>
-                  <span>₹{invoice.cgst_amount?.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span>SGST ({invoice.sgst_rate}%):</span>
-                  <span>₹{invoice.sgst_amount?.toFixed(2)}</span>
-                </div>
-              </>
-            ) : (
-              <div className="flex justify-between py-1">
-                <span>IGST ({invoice.igst_rate}%):</span>
-                <span>₹{invoice.igst_amount?.toFixed(2)}</span>
-              </div>
-            )}
             <div className="flex justify-between py-2 border-t-2 border-primary font-bold text-lg">
               <span>Total Amount:</span>
-              <span>₹{invoice.total_amount.toFixed(2)}</span>
+              <span>₹{bill.total_amount.toFixed(2)}</span>
             </div>
+            {bill.paid_amount !== null && bill.paid_amount > 0 && (
+              <div className="flex justify-between py-1 text-success">
+                <span>Paid Amount:</span>
+                <span>₹{bill.paid_amount.toFixed(2)}</span>
+              </div>
+            )}
+            {bill.paid_amount !== null && bill.paid_amount < bill.total_amount && (
+              <div className="flex justify-between py-1 text-destructive">
+                <span>Balance Due:</span>
+                <span>₹{(bill.total_amount - (bill.paid_amount || 0)).toFixed(2)}</span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Notes */}
-        {invoice.notes && (
+        {bill.notes && (
           <div className="mt-6 pt-6 border-t">
             <p className="text-sm font-semibold mb-2">Notes:</p>
-            <p className="text-sm text-muted-foreground">{invoice.notes}</p>
+            <p className="text-sm text-muted-foreground">{bill.notes}</p>
           </div>
         )}
 
@@ -302,4 +266,4 @@ const InvoiceView = () => {
   );
 };
 
-export default InvoiceView;
+export default DyeingBillView;
