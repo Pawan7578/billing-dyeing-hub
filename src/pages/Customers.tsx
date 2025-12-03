@@ -6,8 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Edit, Trash2, Search } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Users, IndianRupee, MapPin, Phone } from "lucide-react";
+import GSTInput from "@/components/GSTInput";
+import { GSTValidationResult, getStateFromGST } from "@/lib/gst-utils";
 
 interface Customer {
   id: string;
@@ -28,6 +31,7 @@ const Customers = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [gstValidation, setGstValidation] = useState<GSTValidationResult | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     gstin: "",
@@ -60,8 +64,26 @@ const Customers = () => {
     }
   };
 
+  const handleGSTChange = (value: string, validation: GSTValidationResult) => {
+    setFormData({ ...formData, gstin: value });
+    setGstValidation(validation);
+  };
+
+  const handleStateDetected = (state: string) => {
+    if (!formData.state) {
+      setFormData(prev => ({ ...prev, state }));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate GST if provided
+    if (formData.gstin && gstValidation && !gstValidation.isValid) {
+      toast.error("Please enter a valid GST number or leave it empty");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -119,6 +141,7 @@ const Customers = () => {
       pincode: "",
     });
     setEditingCustomer(null);
+    setGstValidation(null);
   };
 
   const openEditDialog = (customer: Customer) => {
@@ -142,11 +165,19 @@ const Customers = () => {
     customer.gstin?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Calculate stats
+  const totalCredit = customers.reduce((sum, c) => sum + (c.total_credit || 0), 0);
+  const customersWithCredit = customers.filter(c => (c.total_credit || 0) > 0).length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Customers</h1>
+          <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
+            <Users className="h-7 w-7 text-primary" />
+            Customers
+          </h1>
           <p className="text-muted-foreground mt-1">Manage your customer database</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => {
@@ -154,35 +185,39 @@ const Customers = () => {
           if (!open) resetForm();
         }}>
           <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
               Add Customer
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{editingCustomer ? "Edit Customer" : "Add New Customer"}</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                {editingCustomer ? "Edit Customer" : "Add New Customer"}
+              </DialogTitle>
               <DialogDescription>
                 {editingCustomer ? "Update customer information" : "Fill in the customer details"}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Name *</Label>
+                  <Label htmlFor="name">Company/Name *</Label>
                   <Input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Enter customer name"
                     required
+                    className="h-11"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="gstin">GSTIN</Label>
-                  <Input
-                    id="gstin"
+                  <GSTInput
                     value={formData.gstin}
-                    onChange={(e) => setFormData({ ...formData, gstin: e.target.value })}
+                    onChange={handleGSTChange}
+                    onStateDetected={handleStateDetected}
                   />
                 </div>
                 <div className="space-y-2">
@@ -191,6 +226,8 @@ const Customers = () => {
                     id="phone"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="+91 98765 43210"
+                    className="h-11"
                   />
                 </div>
                 <div className="space-y-2">
@@ -200,6 +237,8 @@ const Customers = () => {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="customer@example.com"
+                    className="h-11"
                   />
                 </div>
               </div>
@@ -209,23 +248,34 @@ const Customers = () => {
                   id="address"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  placeholder="Street address"
+                  className="h-11"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="city">City</Label>
                   <Input
                     id="city"
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    placeholder="City"
+                    className="h-11"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="state">State</Label>
+                  <Label htmlFor="state">
+                    State
+                    {gstValidation?.isValid && gstValidation.stateName && (
+                      <Badge variant="outline" className="ml-2 text-xs">Auto-detected</Badge>
+                    )}
+                  </Label>
                   <Input
                     id="state"
                     value={formData.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    placeholder="State"
+                    className="h-11"
                   />
                 </div>
                 <div className="space-y-2">
@@ -234,15 +284,17 @@ const Customers = () => {
                     id="pincode"
                     value={formData.pincode}
                     onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                    placeholder="000000"
+                    className="h-11"
                   />
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-3 pt-4">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={loading}>
-                  {editingCustomer ? "Update" : "Add"} Customer
+                <Button type="submit" disabled={loading} className="gap-2">
+                  {loading ? "Saving..." : (editingCustomer ? "Update" : "Add")} Customer
                 </Button>
               </div>
             </form>
@@ -250,66 +302,168 @@ const Customers = () => {
         </Dialog>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>All Customers</CardTitle>
-              <CardDescription>A list of all customers in your system</CardDescription>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Users className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Customers</p>
+                <p className="text-xl font-bold text-foreground">{customers.length}</p>
+              </div>
             </div>
-            <div className="relative w-64">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-warning/5 to-warning/10 border-warning/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-warning/10 flex items-center justify-center">
+                <IndianRupee className="h-5 w-5 text-warning" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Outstanding</p>
+                <p className="text-xl font-bold text-warning">
+                  ₹{totalCredit.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-accent/5 to-accent/10 border-accent/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-accent/10 flex items-center justify-center">
+                <Users className="h-5 w-5 text-accent" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">With Credit</p>
+                <p className="text-xl font-bold text-foreground">{customersWithCredit}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Customer List */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-lg">All Customers</CardTitle>
+              <CardDescription>{filteredCustomers.length} customer(s) found</CardDescription>
+            </div>
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search customers..."
+                placeholder="Search by name, phone, GSTIN..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
+                className="pl-10 h-10"
               />
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>GSTIN</TableHead>
-                <TableHead>City</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Credit</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCustomers.map((customer) => (
-                <TableRow key={customer.id}>
-                  <TableCell className="font-medium">{customer.name}</TableCell>
-                  <TableCell>{customer.phone || "-"}</TableCell>
-                  <TableCell>{customer.gstin || "-"}</TableCell>
-                  <TableCell>{customer.city || "-"}</TableCell>
-                  <TableCell>{customer.state || "-"}</TableCell>
-                  <TableCell>₹{customer.total_credit?.toFixed(2) || "0.00"}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openEditDialog(customer)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(customer.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent"></div>
+            </div>
+          ) : filteredCustomers.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+              <p className="text-muted-foreground">
+                {searchTerm ? "No customers match your search" : "No customers found. Add your first customer!"}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">Customer</TableHead>
+                    <TableHead className="font-semibold">Contact</TableHead>
+                    <TableHead className="font-semibold">GSTIN</TableHead>
+                    <TableHead className="font-semibold">Location</TableHead>
+                    <TableHead className="font-semibold text-right">Credit</TableHead>
+                    <TableHead className="font-semibold text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredCustomers.map((customer) => (
+                    <TableRow key={customer.id} className="hover:bg-secondary/30 transition-colors">
+                      <TableCell>
+                        <div>
+                          <p className="font-medium text-foreground">{customer.name}</p>
+                          {customer.email && (
+                            <p className="text-xs text-muted-foreground">{customer.email}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {customer.phone ? (
+                          <span className="flex items-center gap-1 text-sm">
+                            <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                            {customer.phone}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {customer.gstin ? (
+                          <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                            {customer.gstin}
+                          </code>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {customer.city || customer.state ? (
+                          <span className="flex items-center gap-1 text-sm">
+                            <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                            {[customer.city, customer.state].filter(Boolean).join(", ")}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className={`font-semibold ${(customer.total_credit || 0) > 0 ? "text-warning" : "text-success"}`}>
+                          ₹{(customer.total_credit || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEditDialog(customer)}
+                            className="h-8 w-8 hover:bg-primary/10 hover:text-primary"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(customer.id)}
+                            className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
