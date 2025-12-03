@@ -7,8 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Plus, Trash2, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, FileText, Package, Calculator, StickyNote } from "lucide-react";
+import CompanyBranding from "@/components/CompanyBranding";
+import CustomerCreditCard from "@/components/CustomerCreditCard";
 
 interface InvoiceItem {
   id: string;
@@ -24,6 +27,8 @@ interface Customer {
   name: string;
   gstin: string | null;
   state: string | null;
+  phone: string | null;
+  address: string | null;
 }
 
 const InvoiceNew = () => {
@@ -31,6 +36,7 @@ const InvoiceNew = () => {
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   
   const [customerId, setCustomerId] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
@@ -47,10 +53,19 @@ const InvoiceNew = () => {
     fetchCompanyProfile();
   }, []);
 
+  useEffect(() => {
+    if (customerId) {
+      const customer = customers.find(c => c.id === customerId);
+      setSelectedCustomer(customer || null);
+    } else {
+      setSelectedCustomer(null);
+    }
+  }, [customerId, customers]);
+
   const fetchCustomers = async () => {
     const { data, error } = await supabase
       .from("customers")
-      .select("id, name, gstin, state")
+      .select("id, name, gstin, state, phone, address")
       .order("name");
     
     if (error) {
@@ -140,6 +155,32 @@ const InvoiceNew = () => {
     return `${prefix}-${nextNumber}`;
   };
 
+  const updateCustomerCredit = async (invoiceTotal: number) => {
+    if (!customerId) return;
+
+    const { data: customer, error: fetchError } = await supabase
+      .from("customers")
+      .select("total_credit")
+      .eq("id", customerId)
+      .single();
+
+    if (fetchError) {
+      console.error("Error fetching customer credit:", fetchError);
+      return;
+    }
+
+    const newCredit = (customer?.total_credit || 0) + invoiceTotal;
+
+    const { error: updateError } = await supabase
+      .from("customers")
+      .update({ total_credit: newCredit })
+      .eq("id", customerId);
+
+    if (updateError) {
+      console.error("Error updating customer credit:", updateError);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -214,6 +255,9 @@ const InvoiceNew = () => {
 
       if (itemsError) throw itemsError;
 
+      // Update customer credit
+      await updateCustomerCredit(totalAmount);
+
       toast.success(`Invoice ${invoiceNumber} created successfully!`);
       navigate("/invoices");
     } catch (error: any) {
@@ -225,207 +269,333 @@ const InvoiceNew = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/invoices")}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-3xl font-bold">New Invoice</h1>
-          <p className="text-muted-foreground mt-1">Create a new invoice with GST calculation</p>
+    <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Header with Company Branding */}
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/invoices")} className="mt-1">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
+              <FileText className="h-7 w-7 text-primary" />
+              New Invoice
+            </h1>
+            <p className="text-muted-foreground mt-1">Create a new GST invoice</p>
+          </div>
         </div>
+        
+        {companyProfile && (
+          <div className="lg:max-w-sm">
+            <CompanyBranding company={companyProfile} size="sm" />
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Invoice Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="customer">Customer *</Label>
-                <Select value={customerId} onValueChange={setCustomerId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map(customer => (
-                      <SelectItem key={customer.id} value={customer.id}>
-                        {customer.name}
+        {/* Invoice Details & Customer Selection */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2 shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                Invoice Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="customer" className="text-sm font-medium">Customer *</Label>
+                  <Select value={customerId} onValueChange={setCustomerId}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Select customer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers.map(customer => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          <span className="font-medium">{customer.name}</span>
+                          {customer.gstin && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({customer.gstin})
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="invoice_date" className="text-sm font-medium">Invoice Date</Label>
+                  <Input
+                    id="invoice_date"
+                    type="date"
+                    value={invoiceDate}
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                    className="h-11"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="gst_type" className="text-sm font-medium">GST Type</Label>
+                  <Select value={gstType} onValueChange={(val: any) => setGstType(val)}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CGST_SGST">
+                        <span className="font-medium">Intrastate</span>
+                        <span className="text-xs text-muted-foreground ml-1">(CGST + SGST)</span>
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      <SelectItem value="IGST">
+                        <span className="font-medium">Interstate</span>
+                        <span className="text-xs text-muted-foreground ml-1">(IGST)</span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="gst_rate" className="text-sm font-medium">GST Rate (%)</Label>
+                  <Select value={gstRate.toString()} onValueChange={(val) => setGstRate(parseFloat(val))}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5%</SelectItem>
+                      <SelectItem value="12">12%</SelectItem>
+                      <SelectItem value="18">18%</SelectItem>
+                      <SelectItem value="28">28%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="invoice_date">Invoice Date</Label>
-                <Input
-                  id="invoice_date"
-                  type="date"
-                  value={invoiceDate}
-                  onChange={(e) => setInvoiceDate(e.target.value)}
-                />
-              </div>
+              {/* Selected Customer Details */}
+              {selectedCustomer && (
+                <div className="mt-4 p-4 rounded-lg bg-secondary/30 border border-border/50">
+                  <h4 className="text-sm font-semibold text-foreground mb-2">Bill To:</h4>
+                  <p className="font-medium text-foreground">{selectedCustomer.name}</p>
+                  {selectedCustomer.address && (
+                    <p className="text-sm text-muted-foreground">{selectedCustomer.address}</p>
+                  )}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                    {selectedCustomer.phone && (
+                      <p className="text-sm text-muted-foreground">📞 {selectedCustomer.phone}</p>
+                    )}
+                    {selectedCustomer.gstin && (
+                      <p className="text-sm font-mono text-primary">GSTIN: {selectedCustomer.gstin}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-              <div className="space-y-2">
-                <Label htmlFor="gst_type">GST Type</Label>
-                <Select value={gstType} onValueChange={(val: any) => setGstType(val)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CGST_SGST">Intrastate (CGST + SGST)</SelectItem>
-                    <SelectItem value="IGST">Interstate (IGST)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          {/* Customer Credit Card */}
+          <div className="space-y-4">
+            {customerId && (
+              <CustomerCreditCard customerId={customerId} />
+            )}
+          </div>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="gst_rate">GST Rate (%)</Label>
-                <Input
-                  id="gst_rate"
-                  type="number"
-                  value={gstRate}
-                  onChange={(e) => setGstRate(parseFloat(e.target.value))}
-                  step="0.01"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Items</CardTitle>
-            <Button type="button" onClick={addItem} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
+        {/* Items Section */}
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between pb-4">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Package className="h-5 w-5 text-primary" />
+              Items
+            </CardTitle>
+            <Button type="button" onClick={addItem} size="sm" className="gap-1.5">
+              <Plus className="h-4 w-4" />
               Add Item
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-3">
+              {/* Header Row - Desktop */}
+              <div className="hidden md:grid md:grid-cols-12 gap-2 px-4 py-2 bg-muted/50 rounded-lg text-sm font-medium text-muted-foreground">
+                <div className="col-span-3">Item Name</div>
+                <div className="col-span-2">HSN Code</div>
+                <div className="col-span-2 text-center">Quantity</div>
+                <div className="col-span-2 text-center">Rate (₹)</div>
+                <div className="col-span-2 text-right">Amount (₹)</div>
+                <div className="col-span-1"></div>
+              </div>
+
               {items.map((item, index) => (
-                <div key={item.id} className="grid grid-cols-12 gap-2 items-end p-4 border rounded-lg">
-                  <div className="col-span-12 md:col-span-3 space-y-2">
-                    <Label>Item Name *</Label>
+                <div 
+                  key={item.id} 
+                  className="grid grid-cols-12 gap-2 items-center p-4 border rounded-lg bg-card hover:bg-secondary/20 transition-colors"
+                >
+                  <div className="col-span-12 md:col-span-3">
+                    <Label className="md:hidden text-xs text-muted-foreground mb-1 block">Item Name *</Label>
                     <Input
                       value={item.item_name}
                       onChange={(e) => updateItem(item.id, "item_name", e.target.value)}
-                      placeholder="Item name"
+                      placeholder="Enter item name"
+                      className="h-10"
                     />
                   </div>
                   
-                  <div className="col-span-6 md:col-span-2 space-y-2">
-                    <Label>HSN Code *</Label>
+                  <div className="col-span-6 md:col-span-2">
+                    <Label className="md:hidden text-xs text-muted-foreground mb-1 block">HSN Code *</Label>
                     <Input
                       value={item.hsn_code}
                       onChange={(e) => updateItem(item.id, "hsn_code", e.target.value)}
                       placeholder="HSN"
+                      className="h-10 font-mono"
                     />
                   </div>
                   
-                  <div className="col-span-6 md:col-span-2 space-y-2">
-                    <Label>Quantity</Label>
+                  <div className="col-span-6 md:col-span-2">
+                    <Label className="md:hidden text-xs text-muted-foreground mb-1 block">Quantity</Label>
                     <Input
                       type="number"
                       value={item.quantity}
                       onChange={(e) => updateItem(item.id, "quantity", parseFloat(e.target.value) || 0)}
                       min="0"
                       step="0.01"
+                      className="h-10 text-center"
                     />
                   </div>
                   
-                  <div className="col-span-6 md:col-span-2 space-y-2">
-                    <Label>Rate (₹)</Label>
+                  <div className="col-span-6 md:col-span-2">
+                    <Label className="md:hidden text-xs text-muted-foreground mb-1 block">Rate (₹)</Label>
                     <Input
                       type="number"
                       value={item.rate}
                       onChange={(e) => updateItem(item.id, "rate", parseFloat(e.target.value) || 0)}
                       min="0"
                       step="0.01"
+                      className="h-10 text-center"
                     />
                   </div>
                   
-                  <div className="col-span-5 md:col-span-2 space-y-2">
-                    <Label>Amount (₹)</Label>
+                  <div className="col-span-5 md:col-span-2">
+                    <Label className="md:hidden text-xs text-muted-foreground mb-1 block">Amount (₹)</Label>
                     <Input
                       type="text"
-                      value={item.amount.toFixed(2)}
+                      value={`₹${item.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`}
                       disabled
+                      className="h-10 text-right font-semibold bg-muted/50"
                     />
                   </div>
                   
-                  <div className="col-span-1 md:col-span-1 flex items-end">
+                  <div className="col-span-1 flex justify-end">
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
                       onClick={() => removeItem(item.id)}
                       disabled={items.length === 1}
+                      className="h-10 w-10 hover:bg-destructive/10 hover:text-destructive"
                     >
-                      <Trash2 className="h-4 w-4 text-destructive" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="mt-6 flex justify-end">
-              <div className="w-full md:w-80 space-y-2 border-t pt-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal:</span>
-                  <span className="font-medium">₹{calculateSubtotal().toFixed(2)}</span>
+            {/* Totals Section */}
+            <Separator className="my-6" />
+            
+            <div className="flex justify-end">
+              <div className="w-full md:w-96 space-y-3 p-4 rounded-lg bg-gradient-to-br from-primary/5 to-accent/5 border">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="font-medium text-foreground">
+                    ₹{calculateSubtotal().toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
                 </div>
                 
                 {gstType === "CGST_SGST" ? (
                   <>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">CGST ({gstRate / 2}%):</span>
-                      <span className="font-medium">₹{(calculateGST() / 2).toFixed(2)}</span>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">CGST ({gstRate / 2}%)</span>
+                      <span className="font-medium text-foreground">
+                        ₹{(calculateGST() / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">SGST ({gstRate / 2}%):</span>
-                      <span className="font-medium">₹{(calculateGST() / 2).toFixed(2)}</span>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">SGST ({gstRate / 2}%)</span>
+                      <span className="font-medium text-foreground">
+                        ₹{(calculateGST() / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </span>
                     </div>
                   </>
                 ) : (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">IGST ({gstRate}%):</span>
-                    <span className="font-medium">₹{calculateGST().toFixed(2)}</span>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">IGST ({gstRate}%)</span>
+                    <span className="font-medium text-foreground">
+                      ₹{calculateGST().toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
                 )}
                 
-                <div className="flex justify-between text-lg font-bold border-t pt-2">
-                  <span>Total:</span>
-                  <span>₹{calculateTotal().toFixed(2)}</span>
+                <Separator />
+                
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-bold text-foreground flex items-center gap-2">
+                    <Calculator className="h-5 w-5 text-primary" />
+                    Total
+                  </span>
+                  <span className="text-xl font-bold text-primary">
+                    ₹{calculateTotal().toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Additional Notes</CardTitle>
+        {/* Notes Section */}
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <StickyNote className="h-5 w-5 text-primary" />
+              Additional Notes
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Enter any additional notes or terms..."
-              rows={4}
+              placeholder="Enter any additional notes, terms & conditions..."
+              rows={3}
+              className="resize-none"
             />
           </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-4">
-          <Button type="button" variant="outline" onClick={() => navigate("/invoices")}>
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={() => navigate("/invoices")}
+            className="h-11 px-6"
+          >
             Cancel
           </Button>
-          <Button type="submit" disabled={loading}>
-            {loading ? "Creating..." : "Create Invoice"}
+          <Button 
+            type="submit" 
+            disabled={loading}
+            className="h-11 px-8 gap-2"
+          >
+            {loading ? (
+              <>
+                <span className="animate-spin">⏳</span>
+                Creating...
+              </>
+            ) : (
+              <>
+                <FileText className="h-4 w-4" />
+                Create Invoice
+              </>
+            )}
           </Button>
         </div>
       </form>
