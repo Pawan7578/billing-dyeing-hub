@@ -127,20 +127,20 @@ const DyeingNew = () => {
     return `${prefix}-${nextNumber}`;
   };
 
-  const updateCustomerCredit = async (customerId: string, newBillAmount: number) => {
+  const updateCustomerCredit = async (customerId: string) => {
     // Fetch all invoices for this customer
     const { data: invoices } = await supabase
       .from("invoices")
       .select("total_amount, paid_amount")
       .eq("customer_id", customerId);
 
-    // Fetch all dyeing bills for this customer (including the new one)
+    // Fetch all dyeing bills for this customer (already includes the newly inserted bill)
     const { data: dyeingBills } = await supabase
       .from("dyeing_bills")
       .select("total_amount, paid_amount")
       .eq("customer_id", customerId);
 
-    // Calculate totals
+    // Calculate totals from all bills
     const invoiceTotals = (invoices || []).reduce(
       (acc, inv) => ({
         billed: acc.billed + (inv.total_amount || 0),
@@ -157,8 +157,8 @@ const DyeingNew = () => {
       { billed: 0, paid: 0 }
     );
 
-    // Add the new bill amount
-    const totalBilled = invoiceTotals.billed + dyeingTotals.billed + newBillAmount;
+    // Calculate customer-wise totals (new bill is already in dyeingBills from DB)
+    const totalBilled = invoiceTotals.billed + dyeingTotals.billed;
     const totalPaid = invoiceTotals.paid + dyeingTotals.paid;
     const pendingAmount = totalBilled - totalPaid;
 
@@ -226,7 +226,7 @@ const DyeingNew = () => {
       if (itemsError) throw itemsError;
 
       // Update customer credit after bill creation
-      await updateCustomerCredit(customerId, totalAmount);
+      await updateCustomerCredit(customerId);
 
       toast.success(`Dyeing Bill ${billNumber} created successfully!`);
       navigate("/dyeing");
