@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Plus, Trash2, ArrowLeft } from "lucide-react";
+import CompanyBranding from "@/components/CompanyBranding";
+import CustomerCreditCard from "@/components/CustomerCreditCard";
 
 interface DyeingItem {
   id: string;
@@ -125,6 +127,50 @@ const DyeingNew = () => {
     return `${prefix}-${nextNumber}`;
   };
 
+  const updateCustomerCredit = async (customerId: string, newBillAmount: number) => {
+    // Fetch all invoices for this customer
+    const { data: invoices } = await supabase
+      .from("invoices")
+      .select("total_amount, paid_amount")
+      .eq("customer_id", customerId);
+
+    // Fetch all dyeing bills for this customer (including the new one)
+    const { data: dyeingBills } = await supabase
+      .from("dyeing_bills")
+      .select("total_amount, paid_amount")
+      .eq("customer_id", customerId);
+
+    // Calculate totals
+    const invoiceTotals = (invoices || []).reduce(
+      (acc, inv) => ({
+        billed: acc.billed + (inv.total_amount || 0),
+        paid: acc.paid + (inv.paid_amount || 0)
+      }),
+      { billed: 0, paid: 0 }
+    );
+
+    const dyeingTotals = (dyeingBills || []).reduce(
+      (acc, bill) => ({
+        billed: acc.billed + (bill.total_amount || 0),
+        paid: acc.paid + (bill.paid_amount || 0)
+      }),
+      { billed: 0, paid: 0 }
+    );
+
+    // Add the new bill amount
+    const totalBilled = invoiceTotals.billed + dyeingTotals.billed + newBillAmount;
+    const totalPaid = invoiceTotals.paid + dyeingTotals.paid;
+    const pendingAmount = totalBilled - totalPaid;
+
+    // Update customer's total_credit
+    await supabase
+      .from("customers")
+      .update({ total_credit: pendingAmount })
+      .eq("id", customerId);
+
+    return { totalBilled, totalPaid, pendingAmount };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -179,6 +225,9 @@ const DyeingNew = () => {
 
       if (itemsError) throw itemsError;
 
+      // Update customer credit after bill creation
+      await updateCustomerCredit(customerId, totalAmount);
+
       toast.success(`Dyeing Bill ${billNumber} created successfully!`);
       navigate("/dyeing");
     } catch (error: any) {
@@ -200,6 +249,15 @@ const DyeingNew = () => {
           <p className="text-muted-foreground mt-1">Create a new dyeing bill</p>
         </div>
       </div>
+
+      {/* Company Branding */}
+      {companyProfile && (
+        <Card className="bg-gradient-to-r from-primary/5 via-background to-accent/5">
+          <CardContent className="p-4">
+            <CompanyBranding company={companyProfile} size="md" showDetails={true} />
+          </CardContent>
+        </Card>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <Card>
@@ -234,6 +292,11 @@ const DyeingNew = () => {
                 />
               </div>
             </div>
+
+            {/* Customer Credit Card */}
+            {customerId && (
+              <CustomerCreditCard customerId={customerId} />
+            )}
           </CardContent>
         </Card>
 

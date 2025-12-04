@@ -2,9 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { ArrowLeft, Printer, Share2, FileDown } from "lucide-react";
+import { ArrowLeft, Printer, Share2, FileDown, Building2 } from "lucide-react";
 import * as XLSX from "xlsx";
 
 interface DyeingBillData {
@@ -19,6 +18,8 @@ interface DyeingBillData {
     name: string;
     address: string | null;
     phone: string | null;
+    state: string | null;
+    city: string | null;
   } | null;
 }
 
@@ -48,7 +49,7 @@ const DyeingBillView = () => {
         .from("dyeing_bills")
         .select(`
           *,
-          customers (name, address, phone)
+          customers (name, address, phone, state, city)
         `)
         .eq("id", id)
         .single();
@@ -75,9 +76,9 @@ const DyeingBillView = () => {
     const { data, error } = await supabase
       .from("company_profile")
       .select("*")
-      .single();
+      .maybeSingle();
     
-    if (!error) {
+    if (!error && data) {
       setCompanyProfile(data);
     }
   };
@@ -130,6 +131,37 @@ const DyeingBillView = () => {
     window.open(whatsappUrl, "_blank");
   };
 
+  const numberToWords = (num: number): string => {
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    
+    if (num === 0) return 'Zero';
+    
+    const convertLessThanThousand = (n: number): string => {
+      if (n < 20) return ones[n];
+      if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+      return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + convertLessThanThousand(n % 100) : '');
+    };
+    
+    const integerPart = Math.floor(num);
+    let result = '';
+    
+    if (integerPart >= 10000000) {
+      result += convertLessThanThousand(Math.floor(integerPart / 10000000)) + ' Crore ';
+    }
+    if (integerPart >= 100000) {
+      result += convertLessThanThousand(Math.floor((integerPart % 10000000) / 100000)) + ' Lakh ';
+    }
+    if (integerPart >= 1000) {
+      result += convertLessThanThousand(Math.floor((integerPart % 100000) / 1000)) + ' Thousand ';
+    }
+    if (integerPart % 1000) {
+      result += convertLessThanThousand(integerPart % 1000);
+    }
+    
+    return result.trim() + ' Rupees Only';
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -146,8 +178,11 @@ const DyeingBillView = () => {
     );
   }
 
+  const balanceDue = bill.total_amount - (bill.paid_amount || 0);
+
   return (
     <div className="space-y-6">
+      {/* Action Bar - Hidden on Print */}
       <div className="flex items-center justify-between print:hidden">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate("/dyeing")}>
@@ -172,96 +207,191 @@ const DyeingBillView = () => {
         </div>
       </div>
 
-      <Card className="p-8 print:shadow-none print:border-0">
-        {/* Company Header */}
-        <div className="border-b-2 border-primary pb-6 mb-6">
-          <div className="flex justify-between items-start">
-            <div>
-              <h2 className="text-3xl font-bold text-primary">{companyProfile?.company_name || "Your Company"}</h2>
-              <p className="text-sm text-muted-foreground mt-2">{companyProfile?.address}</p>
-              <p className="text-sm text-muted-foreground">GSTIN: {companyProfile?.gstin}</p>
-              <p className="text-sm text-muted-foreground">Phone: {companyProfile?.phone}</p>
+      {/* Print-Ready Bill Layout */}
+      <div className="bg-background border rounded-lg shadow-sm print:shadow-none print:border-0 print:rounded-none">
+        <div className="p-8 print:p-6 max-w-[210mm] mx-auto">
+          
+          {/* Header with Logo on Left */}
+          <div className="flex items-start gap-6 pb-6 border-b-2 border-primary mb-6">
+            {/* Circular Logo Container */}
+            <div className="flex-shrink-0">
+              <div className="h-24 w-24 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border-2 border-primary/30 flex items-center justify-center overflow-hidden shadow-lg">
+                {companyProfile?.logo_url ? (
+                  <img 
+                    src={companyProfile.logo_url} 
+                    alt={companyProfile?.company_name || "Company Logo"}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <Building2 className="h-12 w-12 text-primary" />
+                )}
+              </div>
             </div>
-            {companyProfile?.logo_url && (
-              <img src={companyProfile.logo_url} alt="Company Logo" className="h-20 w-20 object-contain" />
-            )}
-          </div>
-        </div>
 
-        {/* Bill Details */}
-        <div className="grid grid-cols-2 gap-8 mb-6">
-          <div>
-            <h3 className="font-semibold text-lg mb-2">Bill To:</h3>
-            <p className="font-medium">{bill.customers?.name}</p>
-            <p className="text-sm text-muted-foreground">{bill.customers?.address}</p>
-            <p className="text-sm text-muted-foreground">Phone: {bill.customers?.phone}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm"><span className="font-semibold">Bill No:</span> {bill.bill_number}</p>
-            <p className="text-sm"><span className="font-semibold">Date:</span> {new Date(bill.bill_date).toLocaleDateString("en-IN")}</p>
-            <p className="text-sm"><span className="font-semibold">Status:</span> <span className="uppercase">{bill.status}</span></p>
-          </div>
-        </div>
+            {/* Company Info */}
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-primary mb-1">
+                {companyProfile?.company_name || "Your Company Name"}
+              </h1>
+              {companyProfile?.address && (
+                <p className="text-sm text-muted-foreground">{companyProfile.address}</p>
+              )}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+                {companyProfile?.phone && <span>Phone: {companyProfile.phone}</span>}
+                {companyProfile?.email && <span>Email: {companyProfile.email}</span>}
+              </div>
+              {companyProfile?.gstin && (
+                <p className="text-sm font-semibold text-primary mt-1">GSTIN: {companyProfile.gstin}</p>
+              )}
+            </div>
 
-        {/* Items Table */}
-        <div className="mb-6">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b-2 border-primary">
-                <th className="text-left py-2">Product Name</th>
-                <th className="text-right py-2">Qty</th>
-                <th className="text-right py-2">Rate</th>
-                <th className="text-right py-2">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item, index) => (
-                <tr key={index} className="border-b">
-                  <td className="py-3">{item.product_name}</td>
-                  <td className="text-right py-3">{item.quantity}</td>
-                  <td className="text-right py-3">₹{item.rate.toFixed(2)}</td>
-                  <td className="text-right py-3">₹{item.amount.toFixed(2)}</td>
+            {/* Bill Title */}
+            <div className="text-right">
+              <h2 className="text-3xl font-bold text-primary tracking-wide">DYEING BILL</h2>
+              <p className="text-lg font-semibold mt-2">{bill.bill_number}</p>
+              <p className="text-sm text-muted-foreground">
+                Date: {new Date(bill.bill_date).toLocaleDateString("en-IN")}
+              </p>
+            </div>
+          </div>
+
+          {/* Bill To & Details Section */}
+          <div className="grid grid-cols-2 gap-8 mb-6">
+            <div className="bg-muted/30 p-4 rounded-lg">
+              <h3 className="text-sm font-semibold text-primary uppercase tracking-wide mb-2">Bill To</h3>
+              <p className="font-semibold text-lg">{bill.customers?.name}</p>
+              {bill.customers?.address && (
+                <p className="text-sm text-muted-foreground mt-1">{bill.customers.address}</p>
+              )}
+              {(bill.customers?.city || bill.customers?.state) && (
+                <p className="text-sm text-muted-foreground">
+                  {[bill.customers?.city, bill.customers?.state].filter(Boolean).join(", ")}
+                </p>
+              )}
+              {bill.customers?.phone && (
+                <p className="text-sm text-muted-foreground mt-1">Phone: {bill.customers.phone}</p>
+              )}
+            </div>
+            
+            <div className="bg-muted/30 p-4 rounded-lg">
+              <h3 className="text-sm font-semibold text-primary uppercase tracking-wide mb-2">Bill Details</h3>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Bill No:</span>
+                  <span className="font-medium">{bill.bill_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Bill Date:</span>
+                  <span className="font-medium">{new Date(bill.bill_date).toLocaleDateString("en-IN")}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Status:</span>
+                  <span className={`font-medium uppercase ${bill.status === 'paid' ? 'text-success' : 'text-warning'}`}>
+                    {bill.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <div className="mb-6">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-primary text-primary-foreground">
+                  <th className="py-3 px-4 text-left font-semibold">S.No</th>
+                  <th className="py-3 px-4 text-left font-semibold">Product Description</th>
+                  <th className="py-3 px-4 text-right font-semibold">Qty</th>
+                  <th className="py-3 px-4 text-right font-semibold">Rate (₹)</th>
+                  <th className="py-3 px-4 text-right font-semibold">Amount (₹)</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {items.map((item, index) => (
+                  <tr key={index} className="border-b border-border hover:bg-muted/20">
+                    <td className="py-3 px-4">{index + 1}</td>
+                    <td className="py-3 px-4 font-medium">{item.product_name}</td>
+                    <td className="py-3 px-4 text-right">{item.quantity}</td>
+                    <td className="py-3 px-4 text-right">{item.rate.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className="py-3 px-4 text-right font-medium">{item.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-        {/* Totals */}
-        <div className="flex justify-end">
-          <div className="w-80 space-y-2">
-            <div className="flex justify-between py-2 border-t-2 border-primary font-bold text-lg">
-              <span>Total Amount:</span>
-              <span>₹{bill.total_amount.toFixed(2)}</span>
+          {/* Amount Summary */}
+          <div className="flex justify-end mb-6">
+            <div className="w-80 border rounded-lg overflow-hidden">
+              <div className="flex justify-between py-3 px-4 bg-primary text-primary-foreground font-bold text-lg">
+                <span>Total Amount:</span>
+                <span>₹{bill.total_amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+              {bill.paid_amount !== null && bill.paid_amount > 0 && (
+                <div className="flex justify-between py-2 px-4 border-t text-success">
+                  <span>Paid Amount:</span>
+                  <span>₹{bill.paid_amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {balanceDue > 0 && (
+                <div className="flex justify-between py-2 px-4 border-t bg-destructive/10 text-destructive font-semibold">
+                  <span>Balance Due:</span>
+                  <span>₹{balanceDue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
             </div>
-            {bill.paid_amount !== null && bill.paid_amount > 0 && (
-              <div className="flex justify-between py-1 text-success">
-                <span>Paid Amount:</span>
-                <span>₹{bill.paid_amount.toFixed(2)}</span>
+          </div>
+
+          {/* Amount in Words */}
+          <div className="bg-muted/30 p-3 rounded-lg mb-6">
+            <p className="text-sm">
+              <span className="font-semibold">Amount in Words: </span>
+              <span className="italic">{numberToWords(bill.total_amount)}</span>
+            </p>
+          </div>
+
+          {/* Notes */}
+          {bill.notes && (
+            <div className="mb-6 p-4 border rounded-lg">
+              <p className="text-sm font-semibold mb-1">Notes / Remarks:</p>
+              <p className="text-sm text-muted-foreground">{bill.notes}</p>
+            </div>
+          )}
+
+          {/* Terms & Conditions */}
+          <div className="mb-8 text-xs text-muted-foreground">
+            <p className="font-semibold text-foreground mb-1">Terms & Conditions:</p>
+            <ol className="list-decimal list-inside space-y-0.5">
+              <li>Goods once processed will not be taken back.</li>
+              <li>All disputes subject to local jurisdiction only.</li>
+              <li>E. & O.E. (Errors and Omissions Excepted)</li>
+            </ol>
+          </div>
+
+          {/* Signature Section */}
+          <div className="grid grid-cols-2 gap-8 pt-6 border-t">
+            <div>
+              <p className="text-sm font-semibold mb-16">Customer Signature</p>
+              <div className="border-t border-dashed pt-2">
+                <p className="text-xs text-muted-foreground">Authorized Signatory</p>
               </div>
-            )}
-            {bill.paid_amount !== null && bill.paid_amount < bill.total_amount && (
-              <div className="flex justify-between py-1 text-destructive">
-                <span>Balance Due:</span>
-                <span>₹{(bill.total_amount - (bill.paid_amount || 0)).toFixed(2)}</span>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold mb-2">For {companyProfile?.company_name || "Company"}</p>
+              <div className="h-14"></div>
+              <div className="border-t border-dashed pt-2 inline-block min-w-[200px]">
+                <p className="text-xs text-muted-foreground">Authorized Signatory</p>
               </div>
-            )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-8 pt-4 border-t text-center">
+            <p className="text-sm text-muted-foreground">Thank you for your business!</p>
+            <p className="text-xs text-muted-foreground mt-1">This is a computer generated bill.</p>
           </div>
         </div>
-
-        {/* Notes */}
-        {bill.notes && (
-          <div className="mt-6 pt-6 border-t">
-            <p className="text-sm font-semibold mb-2">Notes:</p>
-            <p className="text-sm text-muted-foreground">{bill.notes}</p>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="mt-12 pt-6 border-t text-center">
-          <p className="text-sm text-muted-foreground">Thank you for your business!</p>
-        </div>
-      </Card>
+      </div>
     </div>
   );
 };
