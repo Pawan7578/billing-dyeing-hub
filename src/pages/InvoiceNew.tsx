@@ -155,25 +155,47 @@ const InvoiceNew = () => {
     return `${prefix}-${nextNumber}`;
   };
 
-  const updateCustomerCredit = async (invoiceTotal: number) => {
+  const updateCustomerCredit = async () => {
     if (!customerId) return;
 
-    const { data: customer, error: fetchError } = await supabase
-      .from("customers")
-      .select("total_credit")
-      .eq("id", customerId)
-      .single();
+    // Fetch all invoices for this customer (includes the newly inserted invoice)
+    const { data: invoices } = await supabase
+      .from("invoices")
+      .select("total_amount, paid_amount")
+      .eq("customer_id", customerId);
 
-    if (fetchError) {
-      console.error("Error fetching customer credit:", fetchError);
-      return;
-    }
+    // Fetch all dyeing bills for this customer
+    const { data: dyeingBills } = await supabase
+      .from("dyeing_bills")
+      .select("total_amount, paid_amount")
+      .eq("customer_id", customerId);
 
-    const newCredit = (customer?.total_credit || 0) + invoiceTotal;
+    // Calculate totals from all bills
+    const invoiceTotals = (invoices || []).reduce(
+      (acc, inv) => ({
+        billed: acc.billed + (inv.total_amount || 0),
+        paid: acc.paid + (inv.paid_amount || 0)
+      }),
+      { billed: 0, paid: 0 }
+    );
 
+    const dyeingTotals = (dyeingBills || []).reduce(
+      (acc, bill) => ({
+        billed: acc.billed + (bill.total_amount || 0),
+        paid: acc.paid + (bill.paid_amount || 0)
+      }),
+      { billed: 0, paid: 0 }
+    );
+
+    // Calculate customer-wise totals
+    const totalBilled = invoiceTotals.billed + dyeingTotals.billed;
+    const totalPaid = invoiceTotals.paid + dyeingTotals.paid;
+    const pendingAmount = totalBilled - totalPaid;
+
+    // Update customer's total_credit with the pending amount
     const { error: updateError } = await supabase
       .from("customers")
-      .update({ total_credit: newCredit })
+      .update({ total_credit: pendingAmount })
       .eq("id", customerId);
 
     if (updateError) {
@@ -256,7 +278,7 @@ const InvoiceNew = () => {
       if (itemsError) throw itemsError;
 
       // Update customer credit
-      await updateCustomerCredit(totalAmount);
+      await updateCustomerCredit();
 
       toast.success(`Invoice ${invoiceNumber} created successfully!`);
       navigate("/invoices");

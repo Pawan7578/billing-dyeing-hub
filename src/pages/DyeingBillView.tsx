@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ArrowLeft, Printer, Share2, FileDown, Building2 } from "lucide-react";
+import EWayBillButton from "@/components/EWayBillButton";
 import * as XLSX from "xlsx";
 
 interface DyeingBillData {
@@ -193,7 +194,8 @@ const DyeingBillView = () => {
             <p className="text-muted-foreground mt-1">View and print dyeing bill</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <EWayBillButton amount={bill.total_amount} />
           <Button variant="outline" size="icon" onClick={handleWhatsAppShare}>
             <Share2 className="h-4 w-4" />
           </Button>

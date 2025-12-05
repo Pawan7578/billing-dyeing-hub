@@ -8,9 +8,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Edit, Trash2, Search, Users, IndianRupee, MapPin, Phone } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Users, IndianRupee, MapPin, Phone, CreditCard } from "lucide-react";
 import GSTInput from "@/components/GSTInput";
-import { GSTValidationResult, getStateFromGST } from "@/lib/gst-utils";
+import PaymentModal from "@/components/PaymentModal";
+import { GSTValidationResult } from "@/lib/gst-utils";
 
 interface Customer {
   id: string;
@@ -32,6 +33,11 @@ const Customers = () => {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [gstValidation, setGstValidation] = useState<GSTValidationResult | null>(null);
+  
+  // Payment modal state
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedCustomerForPayment, setSelectedCustomerForPayment] = useState<Customer | null>(null);
+  
   const [formData, setFormData] = useState({
     name: "",
     gstin: "",
@@ -64,6 +70,27 @@ const Customers = () => {
     }
   };
 
+  // Calculate actual outstanding for each customer
+  const calculateCustomerOutstanding = async (customerId: string): Promise<number> => {
+    const { data: invoices } = await supabase
+      .from("invoices")
+      .select("total_amount, paid_amount")
+      .eq("customer_id", customerId);
+
+    const { data: dyeingBills } = await supabase
+      .from("dyeing_bills")
+      .select("total_amount, paid_amount")
+      .eq("customer_id", customerId);
+
+    const invoiceTotal = (invoices || []).reduce((sum, inv) => 
+      sum + (inv.total_amount || 0) - (inv.paid_amount || 0), 0);
+    
+    const dyeingTotal = (dyeingBills || []).reduce((sum, bill) => 
+      sum + (bill.total_amount || 0) - (bill.paid_amount || 0), 0);
+
+    return invoiceTotal + dyeingTotal;
+  };
+
   const handleGSTChange = (value: string, validation: GSTValidationResult) => {
     setFormData({ ...formData, gstin: value });
     setGstValidation(validation);
@@ -78,7 +105,6 @@ const Customers = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate GST if provided
     if (formData.gstin && gstValidation && !gstValidation.isValid) {
       toast.error("Please enter a valid GST number or leave it empty");
       return;
@@ -159,6 +185,11 @@ const Customers = () => {
     setDialogOpen(true);
   };
 
+  const openPaymentModal = (customer: Customer) => {
+    setSelectedCustomerForPayment(customer);
+    setPaymentModalOpen(true);
+  };
+
   const filteredCustomers = customers.filter(customer =>
     customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     customer.phone?.includes(searchTerm) ||
@@ -170,27 +201,27 @@ const Customers = () => {
   const customersWithCredit = customers.filter(c => (c.total_credit || 0) > 0).length;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-4 md:space-y-6 max-w-7xl mx-auto px-2 md:px-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
-            <Users className="h-7 w-7 text-primary" />
+          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
+            <Users className="h-6 w-6 md:h-7 md:w-7 text-primary" />
             Customers
           </h1>
-          <p className="text-muted-foreground mt-1">Manage your customer database</p>
+          <p className="text-sm text-muted-foreground mt-1">Manage your customer database</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => {
           setDialogOpen(open);
           if (!open) resetForm();
         }}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2 w-full sm:w-auto">
               <Plus className="h-4 w-4" />
               Add Customer
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-2 md:mx-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-primary" />
@@ -289,11 +320,11 @@ const Customers = () => {
                   />
                 </div>
               </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+              <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="w-full sm:w-auto">
                   Cancel
                 </Button>
-                <Button type="submit" disabled={loading} className="gap-2">
+                <Button type="submit" disabled={loading} className="gap-2 w-full sm:w-auto">
                   {loading ? "Saving..." : (editingCustomer ? "Update" : "Add")} Customer
                 </Button>
               </div>
@@ -303,30 +334,30 @@ const Customers = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
         <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-          <CardContent className="p-4">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <Users className="h-5 w-5 text-primary" />
+              <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Users className="h-4 w-4 md:h-5 md:w-5 text-primary" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total Customers</p>
-                <p className="text-xl font-bold text-foreground">{customers.length}</p>
+                <p className="text-lg md:text-xl font-bold text-foreground">{customers.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-warning/5 to-warning/10 border-warning/20">
-          <CardContent className="p-4">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-warning/10 flex items-center justify-center">
-                <IndianRupee className="h-5 w-5 text-warning" />
+              <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-warning/10 flex items-center justify-center">
+                <IndianRupee className="h-4 w-4 md:h-5 md:w-5 text-warning" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total Outstanding</p>
-                <p className="text-xl font-bold text-warning">
+                <p className="text-lg md:text-xl font-bold text-warning">
                   ₹{totalCredit.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                 </p>
               </div>
@@ -335,14 +366,14 @@ const Customers = () => {
         </Card>
 
         <Card className="bg-gradient-to-br from-accent/5 to-accent/10 border-accent/20">
-          <CardContent className="p-4">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-accent/10 flex items-center justify-center">
-                <Users className="h-5 w-5 text-accent" />
+              <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-accent/10 flex items-center justify-center">
+                <Users className="h-4 w-4 md:h-5 md:w-5 text-accent" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">With Credit</p>
-                <p className="text-xl font-bold text-foreground">{customersWithCredit}</p>
+                <p className="text-xs text-muted-foreground">With Outstanding</p>
+                <p className="text-lg md:text-xl font-bold text-foreground">{customersWithCredit}</p>
               </div>
             </div>
           </CardContent>
@@ -351,10 +382,10 @@ const Customers = () => {
 
       {/* Customer List */}
       <Card className="shadow-sm">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 px-3 md:px-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <CardTitle className="text-lg">All Customers</CardTitle>
+              <CardTitle className="text-base md:text-lg">All Customers</CardTitle>
               <CardDescription>{filteredCustomers.length} customer(s) found</CardDescription>
             </div>
             <div className="relative w-full sm:w-72">
@@ -368,7 +399,7 @@ const Customers = () => {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-2 md:px-6">
           {loading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent"></div>
@@ -381,91 +412,178 @@ const Customers = () => {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="font-semibold">Customer</TableHead>
-                    <TableHead className="font-semibold">Contact</TableHead>
-                    <TableHead className="font-semibold">GSTIN</TableHead>
-                    <TableHead className="font-semibold">Location</TableHead>
-                    <TableHead className="font-semibold text-right">Credit</TableHead>
-                    <TableHead className="font-semibold text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCustomers.map((customer) => (
-                    <TableRow key={customer.id} className="hover:bg-secondary/30 transition-colors">
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-foreground">{customer.name}</p>
-                          {customer.email && (
-                            <p className="text-xs text-muted-foreground">{customer.email}</p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {customer.phone ? (
-                          <span className="flex items-center gap-1 text-sm">
-                            <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                            {customer.phone}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
+            <>
+              {/* Mobile View */}
+              <div className="md:hidden space-y-3">
+                {filteredCustomers.map((customer) => (
+                  <div key={customer.id} className="border rounded-lg p-3 bg-card">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <p className="font-medium text-foreground">{customer.name}</p>
+                        {customer.phone && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                            <Phone className="h-3 w-3" /> {customer.phone}
+                          </p>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        {customer.gstin ? (
-                          <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
-                            {customer.gstin}
-                          </code>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {customer.city || customer.state ? (
-                          <span className="flex items-center gap-1 text-sm">
-                            <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                            {[customer.city, customer.state].filter(Boolean).join(", ")}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className={`font-semibold ${(customer.total_credit || 0) > 0 ? "text-warning" : "text-success"}`}>
-                          ₹{(customer.total_credit || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEditDialog(customer)}
-                            className="h-8 w-8 hover:bg-primary/10 hover:text-primary"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(customer.id)}
-                            className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                      </div>
+                      <span className={`text-sm font-semibold ${(customer.total_credit || 0) > 0 ? "text-warning" : "text-success"}`}>
+                        ₹{(customer.total_credit || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                    {customer.gstin && (
+                      <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono block mb-2">
+                        {customer.gstin}
+                      </code>
+                    )}
+                    {(customer.city || customer.state) && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {[customer.city, customer.state].filter(Boolean).join(", ")}
+                      </p>
+                    )}
+                    <div className="flex gap-2 mt-3 pt-3 border-t">
+                      {(customer.total_credit || 0) > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openPaymentModal(customer)}
+                          className="flex-1 gap-1 text-xs"
+                        >
+                          <CreditCard className="h-3 w-3" />
+                          Receive Payment
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openEditDialog(customer)}
+                        className="h-8 w-8"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(customer.id)}
+                        className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop View */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold">Customer</TableHead>
+                      <TableHead className="font-semibold">Contact</TableHead>
+                      <TableHead className="font-semibold">GSTIN</TableHead>
+                      <TableHead className="font-semibold">Location</TableHead>
+                      <TableHead className="font-semibold text-right">Outstanding</TableHead>
+                      <TableHead className="font-semibold text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredCustomers.map((customer) => (
+                      <TableRow key={customer.id} className="hover:bg-secondary/30 transition-colors">
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-foreground">{customer.name}</p>
+                            {customer.email && (
+                              <p className="text-xs text-muted-foreground">{customer.email}</p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {customer.phone ? (
+                            <span className="flex items-center gap-1 text-sm">
+                              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                              {customer.phone}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {customer.gstin ? (
+                            <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                              {customer.gstin}
+                            </code>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {customer.city || customer.state ? (
+                            <span className="flex items-center gap-1 text-sm">
+                              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                              {[customer.city, customer.state].filter(Boolean).join(", ")}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className={`font-semibold ${(customer.total_credit || 0) > 0 ? "text-warning" : "text-success"}`}>
+                            ₹{(customer.total_credit || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            {(customer.total_credit || 0) > 0 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openPaymentModal(customer)}
+                                className="h-8 gap-1 text-xs"
+                              >
+                                <CreditCard className="h-3 w-3" />
+                                Payment
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditDialog(customer)}
+                              className="h-8 w-8 hover:bg-primary/10 hover:text-primary"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(customer.id)}
+                              className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
+
+      {/* Payment Modal */}
+      {selectedCustomerForPayment && (
+        <PaymentModal
+          open={paymentModalOpen}
+          onOpenChange={setPaymentModalOpen}
+          customerId={selectedCustomerForPayment.id}
+          customerName={selectedCustomerForPayment.name}
+          totalOutstanding={selectedCustomerForPayment.total_credit || 0}
+          onPaymentRecorded={fetchCustomers}
+        />
+      )}
     </div>
   );
 };

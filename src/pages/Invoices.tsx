@@ -6,9 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Plus, Eye, Share2, Download, Search, FileText, Calendar, User, IndianRupee } from "lucide-react";
+import { Plus, Eye, Share2, Download, Search, FileText, Calendar, User, IndianRupee, Trash2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import CompanyBranding from "@/components/CompanyBranding";
+import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
 
 interface Invoice {
   id: string;
@@ -17,6 +18,7 @@ interface Invoice {
   total_amount: number;
   paid_amount: number;
   status: string;
+  customer_id: string;
   customers: { name: string } | null;
 }
 
@@ -26,6 +28,11 @@ const Invoices = () => {
   const [companyProfile, setCompanyProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchInvoices();
@@ -54,6 +61,7 @@ const Invoices = () => {
           total_amount,
           paid_amount,
           status,
+          customer_id,
           customers (name)
         `)
         .order("created_at", { ascending: false });
@@ -65,6 +73,67 @@ const Invoices = () => {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteClick = (invoice: Invoice, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setInvoiceToDelete(invoice);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!invoiceToDelete) return;
+    
+    setDeleting(true);
+    try {
+      // First delete invoice items
+      const { error: itemsError } = await supabase
+        .from("invoice_items")
+        .delete()
+        .eq("invoice_id", invoiceToDelete.id);
+
+      if (itemsError) throw itemsError;
+
+      // Then delete the invoice
+      const { error: invoiceError } = await supabase
+        .from("invoices")
+        .delete()
+        .eq("id", invoiceToDelete.id);
+
+      if (invoiceError) throw invoiceError;
+
+      // Update customer's total_credit
+      const { data: invoices } = await supabase
+        .from("invoices")
+        .select("total_amount, paid_amount")
+        .eq("customer_id", invoiceToDelete.customer_id);
+
+      const { data: dyeingBills } = await supabase
+        .from("dyeing_bills")
+        .select("total_amount, paid_amount")
+        .eq("customer_id", invoiceToDelete.customer_id);
+
+      const invoiceTotal = (invoices || []).reduce((sum, inv) => 
+        sum + (inv.total_amount || 0) - (inv.paid_amount || 0), 0);
+      
+      const dyeingTotal = (dyeingBills || []).reduce((sum, bill) => 
+        sum + (bill.total_amount || 0) - (bill.paid_amount || 0), 0);
+
+      await supabase
+        .from("customers")
+        .update({ total_credit: invoiceTotal + dyeingTotal })
+        .eq("id", invoiceToDelete.customer_id);
+
+      toast.success(`Invoice ${invoiceToDelete.invoice_number} deleted successfully`);
+      setDeleteDialogOpen(false);
+      setInvoiceToDelete(null);
+      fetchInvoices();
+    } catch (error: any) {
+      console.error("Error deleting invoice:", error);
+      toast.error("Failed to delete invoice");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -125,35 +194,35 @@ const Invoices = () => {
   const totalPending = totalAmount - totalPaid;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-4 md:space-y-6 max-w-7xl mx-auto px-2 md:px-0">
       {/* Header with Company Branding */}
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 md:gap-6">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
-            <FileText className="h-7 w-7 text-primary" />
+          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
+            <FileText className="h-6 w-6 md:h-7 md:w-7 text-primary" />
             Invoices
           </h1>
-          <p className="text-muted-foreground mt-1">Manage your sales invoices</p>
+          <p className="text-sm text-muted-foreground mt-1">Manage your sales invoices</p>
         </div>
         
         {companyProfile && (
-          <div className="lg:max-w-sm">
+          <div className="lg:max-w-sm hidden lg:block">
             <CompanyBranding company={companyProfile} size="sm" showDetails={false} />
           </div>
         )}
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
         <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-          <CardContent className="p-4">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <IndianRupee className="h-5 w-5 text-primary" />
+              <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <IndianRupee className="h-4 w-4 md:h-5 md:w-5 text-primary" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total Billed</p>
-                <p className="text-xl font-bold text-foreground">
+                <p className="text-lg md:text-xl font-bold text-foreground">
                   ₹{totalAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                 </p>
               </div>
@@ -162,14 +231,14 @@ const Invoices = () => {
         </Card>
 
         <Card className="bg-gradient-to-br from-success/5 to-success/10 border-success/20">
-          <CardContent className="p-4">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-success/10 flex items-center justify-center">
-                <IndianRupee className="h-5 w-5 text-success" />
+              <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-success/10 flex items-center justify-center">
+                <IndianRupee className="h-4 w-4 md:h-5 md:w-5 text-success" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total Received</p>
-                <p className="text-xl font-bold text-success">
+                <p className="text-lg md:text-xl font-bold text-success">
                   ₹{totalPaid.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                 </p>
               </div>
@@ -178,14 +247,14 @@ const Invoices = () => {
         </Card>
 
         <Card className="bg-gradient-to-br from-warning/5 to-warning/10 border-warning/20">
-          <CardContent className="p-4">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-warning/10 flex items-center justify-center">
-                <IndianRupee className="h-5 w-5 text-warning" />
+              <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-warning/10 flex items-center justify-center">
+                <IndianRupee className="h-4 w-4 md:h-5 md:w-5 text-warning" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Outstanding</p>
-                <p className="text-xl font-bold text-warning">
+                <p className="text-lg md:text-xl font-bold text-warning">
                   ₹{totalPending.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                 </p>
               </div>
@@ -207,15 +276,15 @@ const Invoices = () => {
         </div>
         
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportExcel} className="gap-2">
+          <Button variant="outline" onClick={handleExportExcel} className="gap-2 flex-1 sm:flex-none">
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Export</span>
           </Button>
-          <Button variant="outline" onClick={handleWhatsAppShare} className="gap-2">
+          <Button variant="outline" onClick={handleWhatsAppShare} className="gap-2 flex-1 sm:flex-none">
             <Share2 className="h-4 w-4" />
             <span className="hidden sm:inline">Share</span>
           </Button>
-          <Button onClick={() => navigate("/invoices/new")} className="gap-2">
+          <Button onClick={() => navigate("/invoices/new")} className="gap-2 flex-1 sm:flex-none">
             <Plus className="h-4 w-4" />
             New Invoice
           </Button>
@@ -224,11 +293,11 @@ const Invoices = () => {
 
       {/* Invoices List */}
       <Card className="shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">All Invoices</CardTitle>
+        <CardHeader className="pb-3 px-3 md:px-6">
+          <CardTitle className="text-base md:text-lg">All Invoices</CardTitle>
           <CardDescription>{filteredInvoices.length} invoice(s) found</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-2 md:px-6">
           {loading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent"></div>
@@ -245,23 +314,23 @@ const Invoices = () => {
               {filteredInvoices.map((invoice) => (
                 <div
                   key={invoice.id}
-                  className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-xl bg-card hover:bg-secondary/30 hover:border-primary/30 transition-all duration-200 cursor-pointer"
+                  className="group flex flex-col sm:flex-row sm:items-center justify-between p-3 md:p-4 border rounded-xl bg-card hover:bg-secondary/30 hover:border-primary/30 transition-all duration-200 cursor-pointer"
                   onClick={() => navigate(`/invoices/${invoice.id}`)}
                 >
                   <div className="flex-1 mb-3 sm:mb-0">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                    <div className="flex items-center gap-2 md:gap-3 mb-1 flex-wrap">
+                      <h3 className="font-semibold text-sm md:text-base text-foreground group-hover:text-primary transition-colors">
                         {invoice.invoice_number}
                       </h3>
                       {getStatusBadge(invoice.status)}
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-3 md:gap-x-4 gap-y-1 text-xs md:text-sm text-muted-foreground">
                       <span className="flex items-center gap-1">
-                        <User className="h-3.5 w-3.5" />
+                        <User className="h-3 w-3 md:h-3.5 md:w-3.5" />
                         {invoice.customers?.name || "Unknown"}
                       </span>
                       <span className="flex items-center gap-1">
-                        <Calendar className="h-3.5 w-3.5" />
+                        <Calendar className="h-3 w-3 md:h-3.5 md:w-3.5" />
                         {new Date(invoice.invoice_date).toLocaleDateString("en-IN", {
                           day: "numeric",
                           month: "short",
@@ -271,34 +340,44 @@ const Invoices = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-4 sm:gap-6">
+                  <div className="flex items-center justify-between sm:justify-end gap-3 md:gap-4 lg:gap-6">
                     <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Total</p>
-                      <p className="text-lg font-bold text-foreground">
+                      <p className="text-[10px] md:text-xs text-muted-foreground">Total</p>
+                      <p className="text-base md:text-lg font-bold text-foreground">
                         ₹{invoice.total_amount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                       </p>
                     </div>
                     
                     <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Balance</p>
-                      <p className={`text-lg font-bold ${
+                      <p className="text-[10px] md:text-xs text-muted-foreground">Balance</p>
+                      <p className={`text-base md:text-lg font-bold ${
                         invoice.total_amount - invoice.paid_amount > 0 ? "text-warning" : "text-success"
                       }`}>
                         ₹{(invoice.total_amount - invoice.paid_amount).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                       </p>
                     </div>
 
-                    <Button 
-                      variant="ghost" 
-                      size="icon"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/invoices/${invoice.id}`);
-                      }}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="h-8 w-8 opacity-70 md:opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/invoices/${invoice.id}`);
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="h-8 w-8 opacity-70 md:opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive"
+                        onClick={(e) => handleDeleteClick(invoice, e)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -306,6 +385,16 @@ const Invoices = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Invoice"
+        description={`Are you sure you want to delete invoice "${invoiceToDelete?.invoice_number}"? This will also update the customer's outstanding balance. This action cannot be undone.`}
+        onConfirm={handleDeleteConfirm}
+        loading={deleting}
+      />
     </div>
   );
 };
