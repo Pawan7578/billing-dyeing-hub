@@ -1,1 +1,4 @@
 project_id = "cflslksoltbxfworrqda"
+
+[functions.verify-gst]
+verify_jwt = false
