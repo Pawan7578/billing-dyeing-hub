@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Plus, Edit, Trash2, Search, Users, IndianRupee, MapPin, Phone, CreditCard } from "lucide-react";
-import GSTInput from "@/components/GSTInput";
+import GSTInput, { GSTVerifiedData } from "@/components/GSTInput";
 import PaymentModal from "@/components/PaymentModal";
 import { GSTValidationResult } from "@/lib/gst-utils";
 
@@ -100,6 +100,18 @@ const Customers = () => {
     if (!formData.state) {
       setFormData(prev => ({ ...prev, state }));
     }
+  };
+
+  // Handle GST verification auto-fill
+  const handleGSTVerified = (data: any) => {
+    setFormData(prev => ({
+      ...prev,
+      name: prev.name || data.legalName || "",
+      address: prev.address || data.address || "",
+      city: prev.city || data.city || "",
+      state: data.state || prev.state || "",
+      pincode: prev.pincode || data.pincode || "",
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -244,11 +256,13 @@ const Customers = () => {
                     className="h-11"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 sm:col-span-2">
                   <GSTInput
                     value={formData.gstin}
                     onChange={handleGSTChange}
                     onStateDetected={handleStateDetected}
+                    onGSTVerified={handleGSTVerified}
+                    autoVerify={true}
                   />
                 </div>
                 <div className="space-y-2">

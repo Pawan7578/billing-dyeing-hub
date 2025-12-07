@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Upload, X } from "lucide-react";
+import GSTInput, { GSTVerifiedData } from "@/components/GSTInput";
+import { GSTValidationResult } from "@/lib/gst-utils";
 
 interface CompanyProfile {
   id: string;
@@ -24,6 +26,7 @@ const Settings = () => {
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [gstValidation, setGstValidation] = useState<GSTValidationResult | null>(null);
   const [formData, setFormData] = useState({
     company_name: "",
     address: "",
@@ -33,6 +36,21 @@ const Settings = () => {
     invoice_prefix: "INV",
     dyeing_prefix: "DYE",
   });
+
+  // Handle GST input change with validation
+  const handleGSTChange = (value: string, validation: GSTValidationResult) => {
+    setFormData({ ...formData, gstin: value });
+    setGstValidation(validation);
+  };
+
+  // Handle GST verification auto-fill for company profile
+  const handleGSTVerified = (data: GSTVerifiedData) => {
+    setFormData(prev => ({
+      ...prev,
+      company_name: prev.company_name || data.legalName || "",
+      address: prev.address || data.address || "",
+    }));
+  };
 
   useEffect(() => {
     fetchCompanyProfile();
@@ -224,12 +242,12 @@ const Settings = () => {
                   required
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="gstin">GSTIN</Label>
-                <Input
-                  id="gstin"
+              <div className="space-y-2 col-span-2">
+                <GSTInput
                   value={formData.gstin}
-                  onChange={(e) => setFormData({ ...formData, gstin: e.target.value })}
+                  onChange={handleGSTChange}
+                  onGSTVerified={handleGSTVerified}
+                  autoVerify={true}
                 />
               </div>
               <div className="space-y-2">
