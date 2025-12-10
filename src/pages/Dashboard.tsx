@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, FileText, Palette, TrendingUp, DollarSign } from "lucide-react";
@@ -13,6 +14,7 @@ interface Stats {
 }
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<Stats>({
     totalCustomers: 0,
     totalInvoices: 0,
@@ -143,7 +145,7 @@ const Dashboard = () => {
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <button
-            onClick={() => window.location.href = "/customers"}
+            onClick={() => navigate("/customers")}
             className="p-4 border rounded-lg hover:bg-secondary transition-colors text-left"
           >
             <Users className="h-8 w-8 text-primary mb-2" />
@@ -151,7 +153,7 @@ const Dashboard = () => {
             <p className="text-sm text-muted-foreground">Create new customer</p>
           </button>
           <button
-            onClick={() => window.location.href = "/invoices"}
+            onClick={() => navigate("/invoices/new")}
             className="p-4 border rounded-lg hover:bg-secondary transition-colors text-left"
           >
             <FileText className="h-8 w-8 text-accent mb-2" />
@@ -159,7 +161,7 @@ const Dashboard = () => {
             <p className="text-sm text-muted-foreground">Generate invoice</p>
           </button>
           <button
-            onClick={() => window.location.href = "/dyeing"}
+            onClick={() => navigate("/dyeing/new")}
             className="p-4 border rounded-lg hover:bg-secondary transition-colors text-left"
           >
             <Palette className="h-8 w-8 text-warning mb-2" />
@@ -167,7 +169,7 @@ const Dashboard = () => {
             <p className="text-sm text-muted-foreground">Create dyeing bill</p>
           </button>
           <button
-            onClick={() => window.location.href = "/reports"}
+            onClick={() => navigate("/reports")}
             className="p-4 border rounded-lg hover:bg-secondary transition-colors text-left"
           >
             <TrendingUp className="h-8 w-8 text-success mb-2" />
